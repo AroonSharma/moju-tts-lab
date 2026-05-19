@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Moju TTS Lab — Audition</title>
+  <style>
+    :root { color-scheme: light dark; font-family: -apple-system, system-ui, sans-serif; }
+    body { max-width: 880px; margin: 32px auto; padding: 0 16px; line-height: 1.45; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    p.subtitle { margin: 0 0 24px; color: #888; font-size: 13px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    label { display: block; font-size: 12px; color: #888; margin-bottom: 4px; }
+    select, input, textarea, button { font: inherit; padding: 8px 10px; border-radius: 6px; border: 1px solid #888; background: transparent; color: inherit; }
+    textarea { width: 100%; min-height: 80px; box-sizing: border-box; }
+    button { background: #2563eb; color: white; border: none; cursor: pointer; padding: 10px 18px; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary { background: transparent; color: inherit; border: 1px solid #888; }
+    .card { border: 1px solid #888; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .card-header h3 { margin: 0; font-size: 14px; font-weight: 600; }
+    .metric { font-variant-numeric: tabular-nums; font-size: 12px; color: #888; }
+    audio { width: 100%; margin-top: 6px; }
+    .log { font-family: ui-monospace, monospace; font-size: 11px; color: #888; max-height: 80px; overflow: auto; padding: 6px; border-radius: 4px; background: rgba(127,127,127,0.1); }
+  </style>
+</head>
+<body>
+  <h1>Moju TTS Lab</h1>
+  <p class="subtitle">Audition the same Hindi line across every provider you have a key for. Each card runs an independent /tts WebSocket session.</p>
+
+  <div class="row">
+    <div style="flex: 1; min-width: 240px;">
+      <label>Text (Hindi or English)</label>
+      <textarea id="text">एक छोटा खरगोश जंगल में अपनी माँ को ढूंढ रहा था। उसकी आँखों में हल्की सी चमक थी, और उसके पैर ज़मीन पर हल्के से थपथपा रहे थे।</textarea>
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>Language</label>
+      <input id="language" value="hi-IN" size="8" />
+    </div>
+    <div>
+      <label>Sample rate</label>
+      <input id="sampleRate" value="16000" size="6" />
+    </div>
+    <div style="align-self: flex-end;">
+      <button id="run">Generate on all enabled providers</button>
+    </div>
+  </div>
+
+  <div id="cards"></div>
+
+  <script>
+    // One card per provider you want to test. Add/remove voices freely.
+    const PROVIDERS = [
+      { id: "sarvam",     voices: [""] },
+      { id: "google",     voices: ["hi-IN-Neural2-A", "hi-IN-Neural2-B", "hi-IN-Neural2-D", "hi-IN-Wavenet-D", "hi-IN-Chirp3-HD-Aoede", "hi-IN-Chirp3-HD-Kore", "hi-IN-Chirp3-HD-Puck"] },
+      { id: "cartesia",   voices: [""] },
+      { id: "smallest",   voices: [""] },
+      { id: "elevenlabs", voices: [""] },
+    ];
+
+    const cardsEl = document.getElementById("cards");
+    const runBtn = document.getElementById("run");
+
+    function buildCards() {
+      cardsEl.innerHTML = "";
+      for (const p of PROVIDERS) {
+        for (const voice of p.voices) {
+          const card = document.createElement("div");
+          card.className = "card";
+          const voiceLabel = voice ? `${p.id} — ${voice}` : `${p.id} (default voice)`;
+          card.innerHTML = `
+            <div class="card-header">
+              <h3>${voiceLabel}</h3>
+              <span class="metric" data-metric>idle</span>
+            </div>
+            <audio controls></audio>
+            <div class="log"></div>
+          `;
+          card.dataset.provider = p.id;
+          card.dataset.voice = voice;
+          cardsEl.appendChild(card);
+        }
+      }
+    }
+
+    function pcmToWavBlob(pcmChunks, sampleRate) {
+      const total = pcmChunks.reduce((s, b) => s + b.byteLength, 0);
+      const buf = new ArrayBuffer(44 + total);
+      const view = new DataView(buf);
+      const writeStr = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
+      writeStr(0, "RIFF");
+      view.setUint32(4, 36 + total, true);
+      writeStr(8, "WAVE");
+      writeStr(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeStr(36, "data");
+      view.setUint32(40, total, true);
+      let off = 44;
+      for (const c of pcmChunks) {
+        new Uint8Array(buf, off, c.byteLength).set(new Uint8Array(c));
+        off += c.byteLength;
+      }
+      return new Blob([buf], { type: "audio/wav" });
+    }
+
+    function runCard(card) {
+      const provider = card.dataset.provider;
+      const voice = card.dataset.voice;
+      const language = document.getElementById("language").value.trim() || "hi-IN";
+      const sampleRate = Number(document.getElementById("sampleRate").value) || 16000;
+      const text = document.getElementById("text").value;
+      const metricEl = card.querySelector("[data-metric]");
+      const audioEl = card.querySelector("audio");
+      const logEl = card.querySelector(".log");
+      logEl.textContent = "";
+      metricEl.textContent = "connecting…";
+
+      const params = new URLSearchParams({ provider, language, sample_rate: String(sampleRate) });
+      if (voice) params.set("voice", voice);
+      const wsUrl = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/tts?${params}`;
+      const ws = new WebSocket(wsUrl);
+      ws.binaryType = "arraybuffer";
+
+      const chunks = [];
+      const startedAt = performance.now();
+      let ttfb = null;
+      let metaSampleRate = sampleRate;
+
+      const log = (line) => { logEl.textContent += line + "\n"; logEl.scrollTop = logEl.scrollHeight; };
+
+      ws.onopen = () => log("→ open");
+      ws.onmessage = (ev) => {
+        if (ev.data instanceof ArrayBuffer) {
+          chunks.push(ev.data);
+          return;
+        }
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch { return; }
+        if (msg.type === "ready") {
+          log(`← ready provider=${msg.provider} voice=${msg.voice || "default"} sr=${msg.sample_rate}`);
+          metaSampleRate = msg.sample_rate || sampleRate;
+          ws.send(JSON.stringify({ type: "text", text }));
+          ws.send(JSON.stringify({ type: "flush" }));
+          metricEl.textContent = "synthesizing…";
+        } else if (msg.type === "ttfb") {
+          ttfb = msg.ms;
+          metricEl.textContent = `ttfb ${ttfb}ms · streaming…`;
+        } else if (msg.type === "complete") {
+          const audioBytes = chunks.reduce((s, c) => s + c.byteLength, 0);
+          const audioSec = audioBytes / (metaSampleRate * 2);
+          const wallMs = Math.round(performance.now() - startedAt);
+          const blob = pcmToWavBlob(chunks, metaSampleRate);
+          audioEl.src = URL.createObjectURL(blob);
+          metricEl.textContent = `ttfb ${ttfb ?? "?"}ms · audio ${audioSec.toFixed(2)}s · wall ${wallMs}ms`;
+          log(`← complete bytes=${audioBytes} (${audioSec.toFixed(2)}s)`);
+          ws.close(1000, "done");
+        } else if (msg.type === "error") {
+          metricEl.textContent = `error`;
+          log(`✗ ${msg.message}`);
+          ws.close();
+        }
+      };
+      ws.onerror = (err) => { metricEl.textContent = "ws error"; log(`✗ ws error`); };
+      ws.onclose = () => {};
+    }
+
+    runBtn.addEventListener("click", () => {
+      cardsEl.querySelectorAll(".card").forEach(runCard);
+    });
+
+    buildCards();
+  </script>
+</body>
+</html>

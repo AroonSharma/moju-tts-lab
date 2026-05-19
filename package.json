@@ -1,0 +1,20 @@
+{
+  "name": "moju-tts-lab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Provider-agnostic streaming TTS gateway for evaluating Sarvam, Google Cloud TTS, Cartesia, Smallest.ai and ElevenLabs side-by-side. Same WebSocket protocol regardless of backend so the moju Server can be repointed without changes.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "cli": "node test-clients/cli-stream.js",
+    "bench": "node scripts/benchmark.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ws": "^8.18.0"
+  }
+}
