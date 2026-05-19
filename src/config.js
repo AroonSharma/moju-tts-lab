@@ -43,9 +43,9 @@ const config = {
 
   smallest: {
     apiKey: env("SMALLEST_API_KEY"),
-    model: env("SMALLEST_MODEL", "lightning-v2"),
+    model: env("SMALLEST_MODEL", "lightning-v3.1"),
     voice: env("SMALLEST_VOICE"),
-    endpoint: env("SMALLEST_ENDPOINT", "https://waves-api.smallest.ai/api/v1"),
+    endpoint: env("SMALLEST_ENDPOINT", "https://api.smallest.ai/waves/v1"),
   },
 
   elevenlabs: {

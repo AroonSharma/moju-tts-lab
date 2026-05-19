@@ -37,7 +37,7 @@ class SmallestProvider extends TtsProvider {
     super(options);
     this.name = "smallest";
     this.apiKey = options.apiKey || config.smallest.apiKey;
-    this.model = options.model || config.smallest.model || "lightning-v2";
+    this.model = options.model || config.smallest.model || "lightning-v3.1";
     this.voice = options.voice || config.smallest.voice || "";
     this.endpoint = (options.endpoint || config.smallest.endpoint).replace(/\/$/, "");
     this.languageCode = options.languageCode || "hi";
@@ -64,12 +64,12 @@ class SmallestProvider extends TtsProvider {
     }
 
     const url = `${this.endpoint}/${encodeURIComponent(this.model)}/get_speech`;
-    const langShort = String(this.languageCode || "hi").split("-")[0].toLowerCase();
     const payload = {
       text,
       sample_rate: this.sampleRate,
-      language: langShort,
-      add_wav_header: true,
+      // Per Smallest docs the v3.1 endpoint takes voice_id + output_format
+      // (string). add_wav_header is a legacy v2 flag that v3.1 rejects.
+      output_format: "wav",
     };
     if (this.voice) payload.voice_id = this.voice;
 
@@ -84,7 +84,7 @@ class SmallestProvider extends TtsProvider {
       });
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`smallest tts ${res.status}: ${errText.slice(0, 200)}`);
+        throw new Error(`smallest tts ${res.status} ${url}: ${errText.slice(0, 300)}`);
       }
       let pcm = Buffer.from(await res.arrayBuffer());
       let meta = { sampleRate: this.sampleRate, channels: 1, bitsPerSample: 16 };
