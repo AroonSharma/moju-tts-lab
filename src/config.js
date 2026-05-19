@@ -43,9 +43,12 @@ const config = {
 
   smallest: {
     apiKey: env("SMALLEST_API_KEY"),
-    model: env("SMALLEST_MODEL", "lightning-v3.1"),
-    voice: env("SMALLEST_VOICE"),
-    endpoint: env("SMALLEST_ENDPOINT", "https://api.smallest.ai/waves/v1"),
+    // Default to lightning-v2 because the popular Indic voices ("diya",
+    // "raj", etc.) live there. Override with SMALLEST_MODEL=lightning-v3.1
+    // (and the new endpoint) for the newer roster.
+    model: env("SMALLEST_MODEL", "lightning-v2"),
+    voice: env("SMALLEST_VOICE", "diya"),
+    endpoint: env("SMALLEST_ENDPOINT", "https://waves-api.smallest.ai/api/v1"),
   },
 
   elevenlabs: {

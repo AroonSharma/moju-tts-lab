@@ -37,8 +37,8 @@ class SmallestProvider extends TtsProvider {
     super(options);
     this.name = "smallest";
     this.apiKey = options.apiKey || config.smallest.apiKey;
-    this.model = options.model || config.smallest.model || "lightning-v3.1";
-    this.voice = options.voice || config.smallest.voice || "";
+    this.model = options.model || config.smallest.model || "lightning-v2";
+    this.voice = options.voice || config.smallest.voice || "diya";
     this.endpoint = (options.endpoint || config.smallest.endpoint).replace(/\/$/, "");
     this.languageCode = options.languageCode || "hi";
     this._buffer = "";
@@ -64,14 +64,18 @@ class SmallestProvider extends TtsProvider {
     }
 
     const url = `${this.endpoint}/${encodeURIComponent(this.model)}/get_speech`;
+    const isLegacyModel = /^lightning(-v2|-large)?$/i.test(this.model);
     const payload = {
       text,
       sample_rate: this.sampleRate,
-      // Per Smallest docs the v3.1 endpoint takes voice_id + output_format
-      // (string). add_wav_header is a legacy v2 flag that v3.1 rejects.
-      output_format: "wav",
     };
     if (this.voice) payload.voice_id = this.voice;
+    // v2/lightning-large use the add_wav_header bool; v3.x uses output_format.
+    if (isLegacyModel) {
+      payload.add_wav_header = true;
+    } else {
+      payload.output_format = "wav";
+    }
 
     try {
       const res = await fetch(url, {
